@@ -197,11 +197,35 @@ std::ifstream& operator>>(std::ifstream& ifs, Crime& obj)
 void print(const std::map<std::string, std::list<Crime>>& base);
 void save(const std::map<std::string, std::list<Crime>>& base, const std::string& filename);
 void load(std::map<std::string, std::list<Crime>>& base, const std::string& filename);
+tm* init_datetime(tm tm_datetime)
+{
+	const time_t datetime = mktime(&tm_datetime);
+	return localtime(&datetime);
+}
+time_t string_to_datetime(const std::string& s_datetime)
+{
+	tm datetime = tm{};
+	const int SIZE = 32;
+	char buffer[SIZE]{};
+	strcpy(buffer, s_datetime.c_str());//метод const char* c_str()const возвращает RAW строку, которую обворачивает обьект класса 'std::string'
+	int part[5] = {};
+	const char delimiters[] = ". /:";
+	int n = 0;
+	for (char* pch = strtok(buffer, delimiters); pch; pch = strtok(NULL, delimiters))
+		part[n++] = std::stoi(pch);
+	datetime.tm_year = part[0] - 1900;
+	datetime.tm_mon = part[1] - 1;
+	datetime.tm_mday = part[2];
+	datetime.tm_hour = part[3];
+	datetime.tm_min = part[4];
+	datetime = *init_datetime(datetime);
+	return mktime(&datetime);
+}
 
 void main()
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-	SetConsoleDisplayMode(hConsole, CONSOLE_FULLSCREEN_MODE, NULL);
+	//SetConsoleDisplayMode(hConsole, CONSOLE_FULLSCREEN_MODE, NULL);
 	setlocale(LC_ALL, "");
 
 	/*Crime crime("aa777bb", 1, "2023.06.21 12:05", "ул.Ленина");
@@ -234,6 +258,7 @@ void main()
 		},
 	}*/;
 
+	load(base, "base.txt");
 	char key;
 	do
 	{
@@ -244,23 +269,133 @@ void main()
 		cout << "4. Сохранение базы в файл;" << endl;
 		cout << "5. Загрузка базы из файла;" << endl;
 		cout << "6. Добавление записи в базу;" << endl;
+		cout << "7. Вывод номеров по месту происшествия;" << endl;
+		cout << "8. Вывод номеров по дате;" << endl;
 		cout << "0. Выход из программы;" << endl;
 		key = _getch();
 		switch (key)
 		{
 		case '1': print(base); break;
+		case '2':
+		{
+			std::string licence_plate; std::cout << "Введите номер автомобиля: "; cin >> licence_plate;
+			try
+			{
+				for (std::list<Crime>::iterator it = base.at(licence_plate).begin(); it != base.at(licence_plate).end(); ++it)
+					cout << *it << endl;
+			}
+			catch (const std::exception& e)
+			{
+				std::cerr << "В базе нет такого номера" << endl;
+			}
+			system("PAUSE");
+		}
+		break;
+		case'3':
+		{
+			std::string licence_plate_1;
+			std::string licence_plate_2;
+			cout << "Введите начальный номер: "; cin >> licence_plate_1;
+			cout << "Введите конечный номер: "; cin >> licence_plate_2;
+			for (std::map<std::string, std::list<Crime>>::iterator it = base.lower_bound(licence_plate_1);
+				it != base.upper_bound(licence_plate_2); ++it)
+			{
+				cout << it->first << ":\n";
+				for (std::list<Crime>::iterator c_it = it->second.begin(); c_it != it->second.end(); ++c_it)
+				{
+					cout << "\t" << *c_it << endl;
+				}
+			}
+			system("PAUSE");
+		}
+		break;
 		case '4': save(base, "base.txt"); break;
 		case '5': load(base, "base.txt"); break;
 		case '6':
+		{
 			for (std::pair<int, std::string> i : violation)cout << "\t" << i.first << "\t" << i.second << endl;
 			std::string licence_plate;
 			Crime crime(0, "2000.01.01 00:00", "Somewere");
 			cout << "Введите номер автомобиля: "; cin >> licence_plate;
 			cout << "Введите правонарушение: "; cin >> crime;
 			base[licence_plate].push_back(crime);
-			break;
+
+		}
+		break;
+		case '7':
+		{
+			std::string place;
+			cout << "Введите место происшествия: ";
+			SetConsoleCP(1251);
+			std::getline(cin, place);
+			SetConsoleCP(866);
+			for (std::map<std::string, std::list<Crime>>::iterator it = base.begin(); it != base.end(); ++it)
+			{
+				bool present = false;
+				for (std::list<Crime>::iterator c_it = it->second.begin(); c_it != it->second.end(); ++c_it)
+				{
+					if (c_it->get_place().find(place)!=std::string::npos)
+					{
+						present = true;
+						break;
+					}
+				}
+				if (present)
+				{
+					cout << it->first << ":\n";
+					
+					for (std::list<Crime>::iterator c_it = it->second.begin(); c_it != it->second.end(); ++c_it)
+					{
+						if (c_it->get_place().find(place) != std::string::npos)
+						{
+							cout << *c_it << endl;
+						}
+					}
+				}
+			}
+			system("PAUSE");
+		}
+		break;
+		case '8':
+		{
+			std::string start_date;
+			std::string end_date;
+			cout << "Введите начальную дату происшествия: "; std::getline(cin, start_date);
+			cout << "Введите конечную  дату происшествия: "; std::getline(cin, end_date);
+			for (std::map<std::string, std::list<Crime>>::iterator it = base.begin(); it != base.end(); ++it)
+			{
+				bool hit = false;
+				for (std::list<Crime>::iterator c_it = it->second.begin(); c_it != it->second.end(); ++c_it)
+				{
+					if (c_it->get_timestamp() >= string_to_datetime(start_date) && c_it->get_timestamp() <= string_to_datetime(end_date))
+					{
+						hit = true;
+						break;
+					}
+				}
+				if (hit)
+				{
+					cout << it->first << ":\n";
+					for (std::list<Crime>::iterator c_it = it->second.begin(); c_it != it->second.end(); ++c_it)
+					{
+						if (c_it->get_timestamp() >= string_to_datetime(start_date) && c_it->get_timestamp() <= string_to_datetime(end_date))
+						{
+							cout << *c_it << endl;
+						}
+					}
+				}
+			}
+			system("PAUSE");
+		}
+		break;
 		}
 	} while (key != 27 && key != '0');
+	cout << "Сохранить базу? y/n" << endl;
+	key = _getch();
+	if (key == 'y' || key == 'Y' || key == 'н' || key == 'Н')
+	{
+		save(base, "base.txt");
+	}
 	
 }
 
@@ -304,6 +439,7 @@ void save(const std::map<std::string, std::list<Crime>>& base, const std::string
 
 void load(std::map<std::string, std::list<Crime>>& base, const std::string& filename)
 {
+	base.clear();
 	std::ifstream fin(filename);
 	if (fin.is_open())
 	{
